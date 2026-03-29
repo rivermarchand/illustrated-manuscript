@@ -23,10 +23,11 @@ type PageDims = {
 function computeDims(): PageDims {
   const pageWidth = Math.min(BASE_PAGE_WIDTH, window.innerWidth - 40)
   const ratio = pageWidth / BASE_PAGE_WIDTH
-  const pageHeight = Math.min(Math.round(960 * ratio), window.innerHeight - 60)
+  const pageHeight = Math.min(960, window.innerHeight - 60)
   const margin = Math.round(BASE_MARGIN * ratio)
-  const fontSize = Math.max(12, Math.round(BASE_FONT_SIZE * ratio))
-  const lineHeight = Math.max(18, Math.round(BASE_LINE_HEIGHT * ratio))
+  const textRatio = 0.4 + 0.6 * ratio
+  const fontSize = Math.max(14, Math.round(BASE_FONT_SIZE * textRatio))
+  const lineHeight = Math.max(22, Math.round(BASE_LINE_HEIGHT * textRatio))
   const font = `${fontSize}px ${FONT_FAMILY}`
   return { pageWidth, pageHeight, margin, fontSize, lineHeight, font }
 }
@@ -38,12 +39,23 @@ const canvas = document.getElementById('manuscript') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 const dpr = window.devicePixelRatio || 1
 
+// iOS Safari limits total canvas memory — cap pixel count to avoid silent downgrade
+const MAX_CANVAS_PIXELS = 16_777_216
+
 function resizeCanvas(): void {
-  canvas.width = window.innerWidth * dpr
-  canvas.height = window.innerHeight * dpr
+  let w = window.innerWidth * dpr
+  let h = window.innerHeight * dpr
+  const pixels = w * h
+  if (pixels > MAX_CANVAS_PIXELS) {
+    const scale = Math.sqrt(MAX_CANVAS_PIXELS / pixels)
+    w = Math.floor(w * scale)
+    h = Math.floor(h * scale)
+  }
+  canvas.width = w
+  canvas.height = h
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.setTransform(w / window.innerWidth, 0, 0, h / window.innerHeight, 0, 0)
 }
 resizeCanvas()
 window.addEventListener('resize', () => {
@@ -374,7 +386,9 @@ function render(now: number): void {
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
   // --- Draw ---
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const rx = canvas.width / window.innerWidth
+  const ry = canvas.height / window.innerHeight
+  ctx.setTransform(rx, 0, 0, ry, 0, 0)
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
 

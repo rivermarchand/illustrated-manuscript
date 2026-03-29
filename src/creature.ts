@@ -64,10 +64,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-function preScale(img: HTMLImageElement, scale: number): { canvas: OffscreenCanvas; w: number; h: number } {
+function preScale(img: HTMLImageElement, scale: number): { canvas: HTMLCanvasElement; w: number; h: number } {
   const w = Math.round(img.width * scale)
   const h = Math.round(img.height * scale)
-  const canvas = new OffscreenCanvas(w, h)
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
   const ctx = canvas.getContext('2d')!
   ctx.drawImage(img, 0, 0, w, h)
   return { canvas, w, h }
