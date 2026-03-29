@@ -73,7 +73,7 @@ const dragon: Creature = (() => {
 })()
 
 // --- Prepare text ---
-await new FontFace('Furia', 'url(/src/furia-iii.ttf)').load().then(f => document.fonts.add(f))
+await new FontFace('Furia', 'url(/furia-iii.ttf)').load().then(f => document.fonts.add(f))
 await document.fonts.ready
 
 const dropCapChar = STORY_TEXT[0]!

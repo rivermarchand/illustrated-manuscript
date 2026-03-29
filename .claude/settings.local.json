@@ -6,7 +6,9 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "Bash(mkdir -p public)",
-      "Bash(mv dragon-sprites:*)"
+      "Bash(mv dragon-sprites:*)",
+      "Bash(cp src/furia-iii.ttf public/)",
+      "Bash(cp src/Disarm-TM-Regular.otf src/disarm-tm-regular.ttf public/)"
     ]
   }
 }
