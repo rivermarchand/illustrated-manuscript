@@ -20,30 +20,12 @@
       -webkit-user-select: none;
       user-select: none;
     }
-    #drop-cap {
-      position: fixed;
-      pointer-events: none;
-      z-index: 1;
-      visibility: hidden;
-    }
-    #text-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      z-index: 2;
-    }
-    #text-overlay span {
-      position: absolute;
-      white-space: nowrap;
-    }
     canvas {
       display: block;
       position: fixed;
       top: 0;
       left: 0;
       touch-action: none;
-      z-index: 3;
     }
     .attribution {
       position: fixed;
@@ -68,8 +50,6 @@
   </style>
 </head>
 <body>
-  <img id="drop-cap" src="/img/dropcap.png">
-  <div id="text-overlay"></div>
   <canvas id="manuscript"></canvas>
   <div class="attribution">By <a href="https://neithernor.studio/" target="_blank">Neither/Nor</a></div>
   <script type="module" src="/src/main.ts"></script>
