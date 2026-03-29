@@ -1,29 +1,47 @@
-// Fairytale text — opening of a Brothers Grimm-style story
+export const STORY_TEXT = `It was the third candle the abbess had confiscated, and Sable had nodded gravely each time and stolen another from the chapel stores. She kept reading by its unsteady light, hunched beneath her wool blanket in the scriptorium where the novices slept on straw pallets between the copying desks.
 
-export const STORY_TEXT = `In the time before clocks, when the forests still remembered the names of those who walked beneath their boughs, there lived a girl called Elara who could speak to the creatures drawn in the margins of books. She had discovered this gift quite by accident one autumn evening, while reading a bestiary borrowed from the abbey library.
+It was the bestiary that held her. Not the psalter, not the gospels, not the lives of saints with their wooden sufferings. The bestiary. Some brother at Lindisfarne had painted it two centuries ago, and his creatures had a quality she could not name, a weight to them, as if they had been observed from life rather than copied from pattern books. His lions looked hungry. His basilisks looked bored.
 
-The dragon in the corner of page forty-seven had yawned — she was sure of it. A long, slow, sulfurous yawn that made the ink shimmer and the parchment grow warm beneath her fingertips. "Pardon me," the dragon had said, in a voice like crackling vellum. "It has been three hundred years since anyone read this far."
+And his dragon, coiled in the lower margin of the forty-seventh leaf, looked like it was breathing.
 
-From that night forward, Elara visited the bestiary each evening by candlelight. The dragon, whose name was Voss, told her of the old world — of illuminated cities where every wall was a page and every page was a door. He spoke of the great calligraphers who had first given life to his kind, drawing each scale with such devotion that the ink itself learned to breathe.
+She had watched it for six nights before she was certain. The movement was slight, a swelling of the ribs, a settling, barely more than the flicker the candlelight threw across the page. On the seventh night she held her breath and placed a finger beside its painted flank, and the parchment was warm.
 
-"We are not illustrations," Voss explained, curling his tail around an ornate capital T. "We are the spaces between the words. We live in the silence a reader holds between one sentence and the next." He stretched his wings, and the margins of the page widened to accommodate him.
+"You could simply ask," the dragon said.
 
-Elara asked if there were others like him. Voss laughed — a sound like pages turning in a wind. "Others? Child, every manuscript worth its gold leaf is alive. The foxes in the Book of Hours hunt real mice. The angels in the Psalter genuinely sing, though only at matins. And the great serpent in the Lindisfarne Gospels — well." He paused, and his ink-dark eyes grew serious. "Best not to speak of the serpent while the candle burns low."
+Sable jerked her hand back. The dragon opened one eye, yellow as egg tempera, and regarded her with an expression she recognized from the abbey cats: mild contempt for a creature too slow to be interesting but too close to ignore.
 
-But Elara was not a girl easily frightened by warnings. She had read too many stories to believe that danger was anything but the beginning of an adventure. So she asked the question that would change everything: "Can you show me the door?"
+"I am called Voss," it said. "Though the brother who painted me called me several other things, mostly under his breath, mostly because I would not hold still."
 
-Voss regarded her for a long moment. Then, very slowly, he uncurled from the margin and began to walk across the page — not along the lines of text, but through them, his body displacing words like a ship through water. Where he passed, the letters rearranged themselves into new sentences, new meanings, as if the story itself was making room for something that had always been there but never spoken.
+"You are paint," Sable said. It came out less firmly than she intended.
 
-Voss reached the center of the page and pressed his snout against something invisible. The air rippled — or rather, the parchment did — and a seam appeared in the text, glowing faintly gold. "There," he whispered. "The door between stories."
+"I am gall ink and oak soot and gum arabic," Voss replied. "Also rabbit skin glue, which I find personally offensive. But I am not paint. Paint does not get stiff from two centuries of holding the same pose." He uncurled one leg and stretched it across the margin rule, his claws dimpling the parchment. "You, on the other hand, are trespassing. This page is not assigned reading for novices."
 
-Elara leaned closer. Through the seam she could see another page, but not one from the bestiary. This page was illuminated in colors she had no names for — hues that existed only in the dreams of pigment-grinders and the prayers of monks who mixed lapis lazuli with egg yolk under a winter moon.
+"I am not a novice. I clean the scriptorium."
 
-"Every book is a room," Voss said, stepping half through the seam so that his tail remained on one page and his head emerged on another. "And every room has doors to other rooms. The great library is not a place — it is a way of reading. Those who know how to pass between the pages can walk from Genesis to Geometry, from a bestiary to a book of hours, without ever closing a cover."
+"Even worse. A servant reading. The brothers would be scandalized."
 
-Elara reached out and touched the edge of the seam. It was warm, like sun-heated stone, and it hummed beneath her fingers with a frequency that felt like meaning. The letters nearest the opening had begun to glow, each one casting a tiny shadow as if lit from within by a candle no larger than a grain of wheat.
+"The brothers are asleep."
 
-"What happens if I go through?" she asked.
+"The brothers," Voss said, "are always asleep. That is the principal advantage of monasteries." He yawned, and his breath smelled of lamp-black and something older, something mineral, like a cave after rain. A thin red tongue uncurled and tasted the air above the page.
 
-Voss turned his ink-dark eyes upon her. "Then you become part of the story," he said. "Not a reader. Not an author. Something older and stranger — a character who knows she is written, and writes herself anew with every step."
+Sable leaned closer. In the candlelight she could see the crosshatching of his scales, each one laid down with a single stroke of the brush. The brother who painted him had not scrimped. Most bestiary dragons were outlines stuffed with vermillion, flat and heraldic. This one had shadow under its jaw. This one had a nick in its left ear.
 
-She did not hesitate. Elara placed her hand flat upon the glowing seam and pushed, and the page opened like a window onto a world made entirely of words.`
+"What do you eat?" she asked.
+
+"Silverfish, mostly. They get into the binding paste. Occasionally a bookworm, if I am feeling athletic." He cocked his head. "Why are you not frightened?"
+
+"Should I be?"
+
+"Convention demands it. A maiden, a dragon. There are expectations."
+
+"I scrub floors and empty chamber pots. I am not anyone's idea of a maiden."
+
+Voss made a sound that might have been a laugh. It was dry and papery, like a sheet of vellum being folded. "Good," he said. "Maidens are tedious. They always scream at exactly the wrong moment. You, at least, have the sense to ask questions first."
+
+He settled back into the margin, tucking his tail around the descender of a large Q. "Come back tomorrow night," he said. "Bring a candle that does not gutter so badly. And if you can manage it, a bit of cheese. I have not tasted cheese in two hundred years, but I believe I would still recognize it."
+
+"Can you eat cheese? You are made of ink."
+
+"I am made of ink that remembers being alive," Voss said. "There is a considerable difference." He closed his eyes. The warmth under Sable's fingertips faded, and the dragon on the page was still again, just pigment and binder on stretched calfskin, exactly as lifeless as it should have been.
+
+Sable sat in the dark for a long time after the candle burned out. Then she went to the larder and stole a piece of cheese.\u2026`

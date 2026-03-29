@@ -24,10 +24,31 @@
       top: 0;
       left: 0;
     }
+    .attribution {
+      position: fixed;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-family: 'Furia', serif;
+      font-size: 14px;
+      color: #2a1a0a;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .attribution a {
+      color: #2a1a0a;
+      text-decoration: none;
+      pointer-events: auto;
+    }
+    .attribution a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <canvas id="manuscript"></canvas>
+  <div class="attribution">(Click for fire)<br>By <a href="https://neithernor.studio/" target="_blank">Neither/Nor</a></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
