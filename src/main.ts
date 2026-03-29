@@ -1,5 +1,5 @@
 import { prepareWithSegments, layoutNextLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext'
-import { loadDragonSprites, makeDragon, updateCreatureScale, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
+import { loadDragonSprites, makeDragon, updateCreatureScale, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, type Creature } from './creature'
 import { STORY_TEXT } from './text'
 
 // --- Responsive config ---
@@ -9,7 +9,6 @@ const BASE_FONT_SIZE = 21
 const BASE_LINE_HEIGHT = 34
 const FONT_FAMILY = '"Furia", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif'
 const TEXT_COLOR = '#2a1a0a'
-const BG_COLOR = '#f4eee0'
 
 type PageDims = {
   pageWidth: number
@@ -34,9 +33,9 @@ function computeDims(): PageDims {
 
 let dims = computeDims()
 
-// --- Canvas: fills viewport ---
+// --- Canvas: transparent, for dragon + fire only ---
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
-const ctx = canvas.getContext('2d', { alpha: false })!
+const ctx = canvas.getContext('2d')!
 
 function resizeCanvas(): void {
   const dpr = window.devicePixelRatio || 1
@@ -47,6 +46,47 @@ function resizeCanvas(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resizeCanvas()
+
+// --- DOM elements for text + drop cap ---
+const dropCapEl = document.getElementById('drop-cap') as HTMLImageElement
+const textOverlay = document.getElementById('text-overlay')!
+let textSpans: HTMLSpanElement[] = []
+
+function updateDropCap(px: number, py: number): void {
+  const dc = getDropCapSize()
+  dropCapEl.style.left = `${px + dims.margin}px`
+  dropCapEl.style.top = `${py + dims.margin}px`
+  dropCapEl.style.width = `${dc.drawWidth}px`
+  dropCapEl.style.height = `${dc.drawHeight}px`
+}
+
+function updateTextOverlay(px: number, py: number): void {
+  textOverlay.style.transform = `translate(${px}px, ${py}px)`
+  textOverlay.style.font = dims.font
+  textOverlay.style.color = TEXT_COLOR
+
+  // Reuse or create spans as needed
+  while (textSpans.length < cachedLines.length) {
+    const span = document.createElement('span')
+    textOverlay.appendChild(span)
+    textSpans.push(span)
+  }
+
+  for (let i = 0; i < cachedLines.length; i++) {
+    const line = cachedLines[i]!
+    const span = textSpans[i]!
+    span.textContent = line.text
+    span.style.left = `${Math.round(line.x)}px`
+    span.style.top = `${Math.round(line.y)}px`
+    span.style.display = ''
+  }
+
+  for (let i = cachedLines.length; i < textSpans.length; i++) {
+    textSpans[i]!.style.display = 'none'
+  }
+}
+
+// --- Resize ---
 window.addEventListener('resize', () => {
   dims = computeDims()
   ensureTextPrepared()
@@ -131,7 +171,6 @@ const dragon: Creature = (() => {
 await new FontFace('Furia', 'url(/furia-iii.ttf)').load().then(f => document.fonts.add(f))
 await document.fonts.ready
 
-const dropCapChar = STORY_TEXT[0]!
 const restText = STORY_TEXT.slice(1)
 let preparedBody = prepareWithSegments(restText, dims.font)
 let lastPreparedFontSize = dims.fontSize
@@ -143,20 +182,13 @@ function ensureTextPrepared(): void {
   }
 }
 
-// --- Drop cap image ---
-const dropCapImg = new Image()
-dropCapImg.src = '/img/dropcap.png'
-await new Promise<void>(resolve => { dropCapImg.onload = () => resolve() })
+// --- Drop cap ---
+await new Promise<void>(resolve => { dropCapEl.onload = () => resolve(); if (dropCapEl.complete) resolve() })
 
 function getDropCapSize(): { width: number; height: number; drawWidth: number; drawHeight: number } {
   const drawHeight = dims.lineHeight * 7
-  const drawWidth = dropCapImg.width * (drawHeight / dropCapImg.height)
+  const drawWidth = dropCapEl.naturalWidth * (drawHeight / dropCapEl.naturalHeight)
   return { width: drawWidth + 12, height: drawHeight, drawWidth, drawHeight }
-}
-
-function drawDropCap(): void {
-  const dc = getDropCapSize()
-  ctx.drawImage(dropCapImg, dims.margin, dims.margin, dc.drawWidth, dc.drawHeight)
 }
 
 function dropCapMetrics(): { width: number; height: number } {
@@ -212,87 +244,6 @@ function getLineSlots(
   return slots.filter(s => s.right - s.left >= MIN_SLOT_WIDTH)
 }
 
-function drawCharsWithFire(text: string, startX: number, y: number, pox: number, poy: number): void {
-  const capHeight = dims.fontSize * 0.857
-  const halfCap = capHeight / 2
-  let x = startX
-  for (const char of text) {
-    const cw = ctx.measureText(char).width
-    const worldX = x + cw / 2 + pox
-    const worldY = y + halfCap + poy
-    const force = getFireForce(dragon, worldX, worldY)
-
-    if (force.strength < 0.01) {
-      ctx.fillStyle = TEXT_COLOR
-      ctx.globalAlpha = 1
-      ctx.fillText(char, x, y)
-    } else {
-      const s = force.strength
-      ctx.save()
-      ctx.translate(x + cw / 2 + force.dx * s * 45, y + halfCap + force.dy * s * 45)
-      ctx.rotate(s * (force.dx > 0 ? 1 : -1) * 1.2)
-      ctx.globalAlpha = Math.max(0, 1 - s * 0.8)
-      const r = Math.round(42 + s * 200)
-      const g = Math.round(26 + s * 80)
-      const b = Math.round(10)
-      ctx.fillStyle = `rgb(${r},${g},${b})`
-      ctx.fillText(char, -cw / 2, -halfCap)
-      ctx.restore()
-    }
-    x += cw
-  }
-  ctx.globalAlpha = 1
-  ctx.fillStyle = TEXT_COLOR
-}
-
-// --- Decorative vine border (page-local) ---
-function drawVines(): void {
-  ctx.save()
-  ctx.strokeStyle = 'rgba(34, 85, 34, 0.25)'
-  ctx.lineWidth = 2
-
-  ctx.beginPath()
-  const lx = dims.margin - 7
-  for (let y = dims.margin - 5; y < dims.pageHeight - dims.margin + 5; y += 5) {
-    const x = lx + Math.sin(y * 0.02) * 4
-    if (y === dims.margin - 5) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
-  ctx.stroke()
-
-  ctx.fillStyle = 'rgba(34, 85, 34, 0.15)'
-  for (let y = dims.margin + 35; y < dims.pageHeight - dims.margin - 35; y += 60 + Math.sin(y) * 20) {
-    const x = lx + Math.sin(y * 0.02) * 4
-    ctx.beginPath()
-    ctx.ellipse(x - 6, y, 8, 4, -0.5, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  ctx.strokeStyle = 'rgba(34, 85, 34, 0.25)'
-  ctx.beginPath()
-  const rx = dims.pageWidth - dims.margin + 7
-  for (let y = dims.margin - 5; y < dims.pageHeight - dims.margin + 5; y += 5) {
-    const x = rx + Math.sin(y * 0.025 + 1) * 4
-    if (y === dims.margin - 5) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
-  ctx.stroke()
-
-  ctx.restore()
-}
-
-// --- Shadow under page ---
-function drawPageShadow(px: number, py: number): void {
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'
-  ctx.shadowBlur = 30
-  ctx.shadowOffsetX = 0
-  ctx.shadowOffsetY = 8
-  ctx.fillStyle = '#000'
-  ctx.fillRect(px, py, dims.pageWidth, dims.pageHeight)
-  ctx.restore()
-}
-
 // --- Cached text layout (only recomputed when creature moves) ---
 type CachedLine = { text: string; x: number; y: number }
 let cachedLines: CachedLine[] = []
@@ -328,24 +279,6 @@ function recomputeTextLayout(rectObstacles: RectObstacle[], pageOffsetX: number,
   layoutDirty = false
 }
 
-function drawCachedText(pageOffsetX: number, pageOffsetY: number): void {
-  ctx.save()
-  ctx.font = dims.font
-  ctx.textBaseline = 'top'
-
-  const fireActive = hasActiveFire(dragon)
-  for (const line of cachedLines) {
-    if (!fireActive) {
-      ctx.fillStyle = TEXT_COLOR
-      ctx.fillText(line.text, Math.round(line.x), Math.round(line.y))
-    } else {
-      drawCharsWithFire(line.text, line.x, line.y, pageOffsetX, pageOffsetY)
-    }
-  }
-
-  ctx.restore()
-}
-
 // --- Main render loop ---
 let scheduled = false
 
@@ -371,24 +304,17 @@ function render(now: number): void {
     { x: dims.margin - 4, y: dims.margin - 4, width: dc.width, height: dc.height },
   ]
 
-  // Only recompute text layout when creature segments moved
-  if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
+  if (layoutDirty) {
+    recomputeTextLayout(rectObstacles, p.x, p.y)
+    updateDropCap(p.x, p.y)
+    updateTextOverlay(p.x, p.y)
+  }
 
-  // --- Draw ---
+  // --- Draw: canvas only handles dragon + fire ---
   const dpr = window.devicePixelRatio || 1
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.fillStyle = BG_COLOR
-  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
 
-  ctx.save()
-  ctx.translate(p.x, p.y)
-
-  drawDropCap()
-  drawCachedText(p.x, p.y)
-
-  ctx.restore()
-
-  // Draw dragon and fire in world space
   drawFire(ctx, dragon)
   drawCreature(ctx, dragon)
 
