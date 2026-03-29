@@ -19,6 +19,12 @@ const canvas = document.getElementById('manuscript') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 const dpr = window.devicePixelRatio || 1
 
+function getPageScale(): number {
+  const padX = 40
+  const padY = 80
+  return Math.min(1, (window.innerWidth - padX) / PAGE_WIDTH, (window.innerHeight - padY) / PAGE_HEIGHT)
+}
+
 function resizeCanvas(): void {
   canvas.width = window.innerWidth * dpr
   canvas.height = window.innerHeight * dpr
@@ -27,13 +33,14 @@ function resizeCanvas(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resizeCanvas()
-window.addEventListener('resize', () => { resizeCanvas(); scheduleRender() })
+window.addEventListener('resize', () => { resizeCanvas(); layoutDirty = true; scheduleRender() })
 
-// Page offset — centered in viewport
+// Page offset — centered in viewport (in scaled coords)
 function pageOffset(): { x: number; y: number } {
+  const scale = getPageScale()
   return {
-    x: Math.round((window.innerWidth - PAGE_WIDTH) / 2),
-    y: Math.round(Math.max(20, (window.innerHeight - PAGE_HEIGHT) / 2)),
+    x: Math.round((window.innerWidth / scale - PAGE_WIDTH) / 2),
+    y: Math.round(Math.max(20, (window.innerHeight / scale - PAGE_HEIGHT) / 2)),
   }
 }
 
@@ -43,8 +50,9 @@ let lastMouseMoveTime = 0
 const IDLE_THRESHOLD = 2000 // ms before dragon returns to drop cap
 
 canvas.addEventListener('mousemove', (e) => {
-  mouse.x = e.clientX
-  mouse.y = e.clientY
+  const scale = getPageScale()
+  mouse.x = e.clientX / scale
+  mouse.y = e.clientY / scale
   lastMouseMoveTime = performance.now()
   scheduleRender()
 })
@@ -61,6 +69,32 @@ canvas.addEventListener('mouseup', () => {
 })
 
 canvas.addEventListener('mouseleave', () => {
+  mouseDown = false
+})
+
+// Touch events for mobile
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault()
+  const touch = e.touches[0]!
+  const scale = getPageScale()
+  mouse.x = touch.clientX / scale
+  mouse.y = touch.clientY / scale
+  mouseDown = true
+  lastMouseMoveTime = performance.now()
+  scheduleRender()
+}, { passive: false })
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault()
+  const touch = e.touches[0]!
+  const scale = getPageScale()
+  mouse.x = touch.clientX / scale
+  mouse.y = touch.clientY / scale
+  lastMouseMoveTime = performance.now()
+  scheduleRender()
+}, { passive: false })
+
+canvas.addEventListener('touchend', () => {
   mouseDown = false
 })
 
@@ -323,6 +357,7 @@ let scheduled = false
 function render(now: number): void {
   scheduled = false
 
+  const scale = getPageScale()
   const p = pageOffset()
 
   // Update creature — head chases mouse, or perches on drop cap when idle
@@ -345,8 +380,13 @@ function render(now: number): void {
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
   // --- Draw ---
+  // Clear at full viewport size (unscaled)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
+
+  // Apply page scale for all content
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0)
 
   ctx.save()
   ctx.translate(p.x, p.y)
@@ -356,7 +396,7 @@ function render(now: number): void {
 
   ctx.restore()
 
-  // Draw dragon and fire in world space
+  // Draw dragon and fire in world space (still scaled)
   drawFire(ctx, dragon)
   drawCreature(ctx, dragon)
 
