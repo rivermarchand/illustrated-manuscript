@@ -34,16 +34,79 @@ function computeDims(): PageDims {
 
 let dims = computeDims()
 
-// --- Canvas: sized at full device pixel density ---
+// --- WebGL display canvas + offscreen 2D canvas for rendering ---
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
-const ctx = canvas.getContext('2d', { alpha: false })!
+const gl = canvas.getContext('webgl2', { alpha: false, antialias: false })!
+
+// Offscreen 2D canvas where all drawing happens
+const offscreen = document.createElement('canvas')
+const ctx = offscreen.getContext('2d')!
+
+// --- WebGL setup: fullscreen textured quad ---
+const VERT_SRC = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+  v_uv = (a_pos + 1.0) * 0.5;
+  v_uv.y = 1.0 - v_uv.y;
+}
+`
+
+const FRAG_SRC = `#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+out vec4 fragColor;
+void main() {
+  fragColor = texture(u_tex, v_uv);
+}
+`
+
+function compileShader(type: number, src: string): WebGLShader {
+  const shader = gl.createShader(type)!
+  gl.shaderSource(shader, src)
+  gl.compileShader(shader)
+  return shader
+}
+
+const prog = gl.createProgram()!
+gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, VERT_SRC))
+gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, FRAG_SRC))
+gl.linkProgram(prog)
+gl.useProgram(prog)
+
+// Fullscreen quad (triangle strip)
+const quad = gl.createBuffer()!
+gl.bindBuffer(gl.ARRAY_BUFFER, quad)
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW)
+const aPos = gl.getAttribLocation(prog, 'a_pos')
+gl.enableVertexAttribArray(aPos)
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
+
+// Texture for the offscreen canvas
+const tex = gl.createTexture()!
+gl.bindTexture(gl.TEXTURE_2D, tex)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
 function resizeCanvas(): void {
   const ratio = Math.ceil(window.devicePixelRatio || 1)
-  canvas.width = window.innerWidth * ratio
-  canvas.height = window.innerHeight * ratio
+  const w = window.innerWidth * ratio
+  const h = window.innerHeight * ratio
+
+  // WebGL display canvas
+  canvas.width = w
+  canvas.height = h
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
+  gl.viewport(0, 0, w, h)
+
+  // Offscreen 2D canvas at same resolution
+  offscreen.width = w
+  offscreen.height = h
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 }
 resizeCanvas()
@@ -328,7 +391,7 @@ function render(now: number): void {
 
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
-  // --- Draw ---
+  // --- Draw to offscreen 2D canvas ---
   const ratio = Math.ceil(window.devicePixelRatio || 1)
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
   ctx.fillStyle = BG_COLOR
@@ -345,6 +408,11 @@ function render(now: number): void {
   // Draw dragon and fire in world space
   drawFire(ctx, dragon)
   drawCreature(ctx, dragon)
+
+  // --- Upload offscreen canvas to WebGL and present ---
+  gl.bindTexture(gl.TEXTURE_2D, tex)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, offscreen)
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 
   scheduleRender()
 }
