@@ -1,5 +1,5 @@
 import { prepareWithSegments, layoutNextLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext'
-import { loadDragonSprites, makeDragon, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
+import { loadDragonSprites, makeDragon, updateCreatureScale, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
 import { STORY_TEXT } from './text'
 
 // --- Responsive config ---
@@ -49,6 +49,7 @@ resizeCanvas()
 window.addEventListener('resize', () => {
   dims = computeDims()
   ensureTextPrepared()
+  updateCreatureScale(dragon, getCreatureScale())
   resizeCanvas()
   layoutDirty = true
   scheduleRender()
@@ -116,9 +117,13 @@ canvas.addEventListener('touchend', () => {
 // --- Load dragon sprites, then create creature ---
 await loadDragonSprites()
 
+function getCreatureScale(): number {
+  return Math.min(1, dims.pageWidth / BASE_PAGE_WIDTH)
+}
+
 const dragon: Creature = (() => {
   const p = pageOffset()
-  return makeDragon(p.x + dims.pageWidth / 2, p.y + dims.pageHeight / 3)
+  return makeDragon(p.x + dims.pageWidth / 2, p.y + dims.pageHeight / 3, getCreatureScale())
 })()
 
 // --- Prepare text (re-prepared when font size changes) ---
@@ -351,8 +356,9 @@ function render(now: number): void {
 
   // Update creature — head chases mouse, or perches on drop cap when idle
   const idle = now - lastMouseMoveTime > IDLE_THRESHOLD
+  const cScale = getCreatureScale()
   const perchX = p.x + dims.margin + dc.width * 0.8
-  const perchY = p.y + dims.margin - 70
+  const perchY = p.y + dims.margin - 70 * cScale
   const stepped = stepCreature(dragon, now, mouse.x, mouse.y, idle, perchX, perchY)
   if (mouseDown) spawnFireParticles(dragon)
   const fireActive = hasActiveFire(dragon)

@@ -28,6 +28,7 @@ export type Creature = {
   stepInterval: number
   fire: FireParticle[]
   fireLastStep: number
+  scale: number
 }
 
 // --- Sprite loading ---
@@ -126,14 +127,14 @@ function segmentWidth(i: number): number {
   return 10
 }
 
-export function makeDragon(startX: number, startY: number): Creature {
+export function makeDragon(startX: number, startY: number, scale: number = 1): Creature {
   const segments: Segment[] = []
   for (let i = 0; i < SEGMENT_COUNT; i++) {
     segments.push({
       x: startX,
-      y: startY + i * SEGMENT_SPACING,
+      y: startY + i * SEGMENT_SPACING * scale,
       angle: -Math.PI / 2,
-      width: segmentWidth(i),
+      width: segmentWidth(i) * scale,
     })
   }
   return {
@@ -143,26 +144,32 @@ export function makeDragon(startX: number, startY: number): Creature {
     stepInterval: 80,
     fire: [],
     fireLastStep: 0,
+    scale,
+  }
+}
+
+export function updateCreatureScale(creature: Creature, scale: number): void {
+  creature.scale = scale
+  for (let i = 0; i < creature.segments.length; i++) {
+    creature.segments[i]!.width = segmentWidth(i) * scale
   }
 }
 
 // Generate idle pose: head on top of drop cap facing right, body curves down-left
-function generateIdlePose(perchX: number, perchY: number): { x: number; y: number; angle: number }[] {
+function generateIdlePose(perchX: number, perchY: number, scale: number): { x: number; y: number; angle: number }[] {
   const pose: { x: number; y: number; angle: number }[] = []
-  // Head faces right (angle 0)
+  const spacing = SEGMENT_SPACING * scale
   const headAngle = 0
 
   pose.push({ x: perchX, y: perchY - 2, angle: headAngle })
 
   for (let i = 1; i < SEGMENT_COUNT; i++) {
-    // Body trails left from head, curving downward
     const t = i / (SEGMENT_COUNT - 1)
-    // Negative angle so segments go left and DOWN (sin negative = +y in canvas)
     const segAngle = -(t * (Math.PI / 2) * 1.4)
     const prev = pose[i - 1]!
     pose.push({
-      x: prev.x - Math.cos(segAngle) * SEGMENT_SPACING,
-      y: prev.y - Math.sin(segAngle) * SEGMENT_SPACING,
+      x: prev.x - Math.cos(segAngle) * spacing,
+      y: prev.y - Math.sin(segAngle) * spacing,
       angle: segAngle,
     })
   }
@@ -175,7 +182,7 @@ export function stepCreature(creature: Creature, now: number, targetX: number, t
   creature.jitterSeed = Math.random() * 1000
 
   if (idle) {
-    const pose = generateIdlePose(perchX, perchY)
+    const pose = generateIdlePose(perchX, perchY, creature.scale)
     const lerpSpeed = 0.12
     for (let i = 0; i < creature.segments.length; i++) {
       const seg = creature.segments[i]!
@@ -222,8 +229,9 @@ export function stepCreature(creature: Creature, now: number, targetX: number, t
     seg.angle = desired
 
     // Position segment behind leader at constrained angle
-    seg.x = leader.x - Math.cos(seg.angle) * SEGMENT_SPACING
-    seg.y = leader.y - Math.sin(seg.angle) * SEGMENT_SPACING
+    const spacing = SEGMENT_SPACING * creature.scale
+    seg.x = leader.x - Math.cos(seg.angle) * spacing
+    seg.y = leader.y - Math.sin(seg.angle) * spacing
   }
 
   return true
@@ -276,6 +284,8 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
   const jitter = creature.jitterSeed
   const wingTime = performance.now() / 1000
 
+  const s = creature.scale
+
   // 1. Draw wing-back behind everything
   if (wingBackImg) {
     const wingSeg = segs[WING_SEGMENT]!
@@ -288,6 +298,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
     ctx.save()
     ctx.translate(wingSeg.x + jx, wingSeg.y + jy)
     ctx.rotate(wingSeg.angle + jAngle + wingFlap)
+    ctx.scale(s, s)
     const { w: ww, h: wh } = wingBackSize
     ctx.drawImage(wingBackImg, 0, 0, ww, wh, -ww, -wh, ww, wh)
     ctx.restore()
@@ -304,6 +315,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
     ctx.save()
     ctx.translate(seg.x + jx, seg.y + jy)
     ctx.rotate(seg.angle + jAngle)
+    ctx.scale(s, s)
 
     if (i === 0) {
       if (tongueImg) {
@@ -344,14 +356,15 @@ const FIRE_STEP_INTERVAL = 80
 
 export function spawnFireParticles(creature: Creature): void {
   const head = creature.segments[0]!
-  const snoutDist = (headImg ? headImg.width * SPRITE_SCALE * 0.55 : 30)
+  const s = creature.scale
+  const snoutDist = (headImg ? headImg.width * SPRITE_SCALE * 0.55 : 30) * s
   const snoutX = head.x + Math.cos(head.angle) * snoutDist
   const snoutY = head.y + Math.sin(head.angle) * snoutDist
 
   const count = 3 + Math.floor(Math.random() * 3)
   for (let i = 0; i < count; i++) {
     const spread = (Math.random() - 0.5) * 0.25
-    const speed = 35 + Math.random() * 20
+    const speed = (35 + Math.random() * 20) * s
     const angle = head.angle + spread
 
     creature.fire.push({
@@ -359,7 +372,7 @@ export function spawnFireParticles(creature: Creature): void {
       y: snoutY + (Math.random() - 0.5) * 4,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      size: 8 + Math.random() * 12,
+      size: (8 + Math.random() * 12) * s,
       life: 1,
       maxLife: 12 + Math.floor(Math.random() * 6),
       frame: 0,
