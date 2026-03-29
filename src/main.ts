@@ -58,6 +58,7 @@ function updateDropCap(px: number, py: number): void {
   dropCapEl.style.top = `${py + dims.margin}px`
   dropCapEl.style.width = `${dc.drawWidth}px`
   dropCapEl.style.height = `${dc.drawHeight}px`
+  dropCapEl.style.visibility = 'visible'
 }
 
 function updateTextOverlay(px: number, py: number): void {
@@ -183,7 +184,11 @@ function ensureTextPrepared(): void {
 }
 
 // --- Drop cap ---
-await new Promise<void>(resolve => { dropCapEl.onload = () => resolve(); if (dropCapEl.complete) resolve() })
+await new Promise<void>((resolve, reject) => {
+  if (dropCapEl.complete && dropCapEl.naturalWidth > 0) { resolve(); return }
+  dropCapEl.onload = () => resolve()
+  dropCapEl.onerror = () => reject(new Error('Drop cap failed to load'))
+})
 
 function getDropCapSize(): { width: number; height: number; drawWidth: number; drawHeight: number } {
   const drawHeight = dims.lineHeight * 7
