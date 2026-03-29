@@ -1,18 +1,18 @@
 import { prepareWithSegments, layoutNextLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext'
-import { makeDragon, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
+import { loadDragonSprites, makeDragon, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
 import { STORY_TEXT } from './text'
 
 // --- Config ---
 const PAGE_WIDTH = 700
 const PAGE_HEIGHT = 960
-const MARGIN = 60
-const BODY_FONT = '18px "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif'
-const LINE_HEIGHT = 30
+const MARGIN = 45
+const BODY_FONT = '21px "Furia", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif'
+const LINE_HEIGHT = 34
 const TEXT_COLOR = '#2a1a0a'
-const DROP_CAP_FONT = '128px "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif'
+const DROP_CAP_FONT = '128px "Furia", "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Georgia", serif'
 const DROP_CAP_COLOR = '#8B0000'
-const PARCHMENT_BASE = '#f4e4c1'
-const BG_COLOR = '#2a1f14'
+const PARCHMENT_BASE = '#f4eee0'
+const BG_COLOR = '#f4eee0'
 
 // --- Canvas: fills viewport ---
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
@@ -39,10 +39,13 @@ function pageOffset(): { x: number; y: number } {
 
 // --- State ---
 const mouse = { x: 0, y: 0 }
+let lastMouseMoveTime = 0
+const IDLE_THRESHOLD = 2000 // ms before dragon returns to drop cap
 
 canvas.addEventListener('mousemove', (e) => {
   mouse.x = e.clientX
   mouse.y = e.clientY
+  lastMouseMoveTime = performance.now()
   scheduleRender()
 })
 
@@ -61,91 +64,37 @@ canvas.addEventListener('mouseleave', () => {
   mouseDown = false
 })
 
-// --- Creature (world coordinates) ---
+// --- Load dragon sprites, then create creature ---
+await loadDragonSprites()
+
 const dragon: Creature = (() => {
   const p = pageOffset()
   return makeDragon(p.x + PAGE_WIDTH / 2, p.y + PAGE_HEIGHT / 3)
 })()
 
 // --- Prepare text ---
+await new FontFace('Furia', 'url(/src/furia-iii.ttf)').load().then(f => document.fonts.add(f))
 await document.fonts.ready
 
 const dropCapChar = STORY_TEXT[0]!
 const restText = STORY_TEXT.slice(1)
 const preparedBody = prepareWithSegments(restText, BODY_FONT)
 
-// --- Parchment texture (cached, page-local coordinates) ---
-const parchmentCanvas = document.createElement('canvas')
-parchmentCanvas.width = PAGE_WIDTH * dpr
-parchmentCanvas.height = PAGE_HEIGHT * dpr
-const parchmentCtx = parchmentCanvas.getContext('2d')!
-parchmentCtx.scale(dpr, dpr)
 
-function cacheParchment(): void {
-  parchmentCtx.fillStyle = PARCHMENT_BASE
-  parchmentCtx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT)
+// --- Drop cap image ---
+const DROP_CAP_HEIGHT = LINE_HEIGHT * 7
+const dropCapImg = new Image()
+dropCapImg.src = '/img/dropcap.png'
+await new Promise<void>(resolve => { dropCapImg.onload = () => resolve() })
+const DROP_CAP_WIDTH = dropCapImg.width * (DROP_CAP_HEIGHT / dropCapImg.height)
 
-  const imageData = parchmentCtx.getImageData(0, 0, PAGE_WIDTH * dpr, PAGE_HEIGHT * dpr)
-  const data = imageData.data
-  for (let i = 0; i < data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * 15
-    data[i] = Math.min(255, Math.max(0, data[i]! + noise))
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1]! + noise))
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2]! + noise))
-  }
-  parchmentCtx.putImageData(imageData, 0, 0)
-
-  const gradient = parchmentCtx.createRadialGradient(
-    PAGE_WIDTH / 2, PAGE_HEIGHT / 2, PAGE_WIDTH * 0.3,
-    PAGE_WIDTH / 2, PAGE_HEIGHT / 2, PAGE_WIDTH * 0.75
-  )
-  gradient.addColorStop(0, 'rgba(0,0,0,0)')
-  gradient.addColorStop(1, 'rgba(80,50,20,0.15)')
-  parchmentCtx.fillStyle = gradient
-  parchmentCtx.fillRect(0, 0, PAGE_WIDTH, PAGE_HEIGHT)
-
-  parchmentCtx.strokeStyle = '#8B6914'
-  parchmentCtx.lineWidth = 2
-  const bm = 30
-  parchmentCtx.strokeRect(bm, bm, PAGE_WIDTH - bm * 2, PAGE_HEIGHT - bm * 2)
-  parchmentCtx.strokeStyle = 'rgba(139, 105, 20, 0.3)'
-  parchmentCtx.lineWidth = 1
-  parchmentCtx.strokeRect(bm + 6, bm + 6, PAGE_WIDTH - (bm + 6) * 2, PAGE_HEIGHT - (bm + 6) * 2)
-}
-cacheParchment()
-
-// --- Drop cap (page-local) ---
 function drawDropCap(): { width: number; height: number } {
-  ctx.save()
-  ctx.font = DROP_CAP_FONT
-  ctx.fillStyle = DROP_CAP_COLOR
-  ctx.textBaseline = 'top'
-
-  const metrics = ctx.measureText(dropCapChar)
-  const w = metrics.width + 12
-  const h = LINE_HEIGHT * 4
-
-  ctx.fillStyle = 'rgba(139, 0, 0, 0.06)'
-  ctx.fillRect(MARGIN - 4, MARGIN - 4, w + 8, h + 8)
-
-  ctx.fillStyle = DROP_CAP_COLOR
-  ctx.font = DROP_CAP_FONT
-  ctx.fillText(dropCapChar, MARGIN, MARGIN - 8)
-
-  ctx.strokeStyle = 'rgba(139, 0, 0, 0.3)'
-  ctx.lineWidth = 1.5
-  ctx.strokeRect(MARGIN - 4, MARGIN - 4, w + 8, h + 8)
-
-  ctx.restore()
-  return { width: w + 16, height: h + 8 }
+  ctx.drawImage(dropCapImg, MARGIN, MARGIN, DROP_CAP_WIDTH, DROP_CAP_HEIGHT)
+  return { width: DROP_CAP_WIDTH + 12, height: DROP_CAP_HEIGHT }
 }
 
 function dropCapMetrics(): { width: number; height: number } {
-  ctx.save()
-  ctx.font = DROP_CAP_FONT
-  const metrics = ctx.measureText(dropCapChar)
-  ctx.restore()
-  return { width: metrics.width + 28, height: LINE_HEIGHT * 4 + 8 }
+  return { width: DROP_CAP_WIDTH + 12, height: DROP_CAP_HEIGHT }
 }
 
 // --- Text layout with obstacle avoidance (page-local coords) ---
@@ -316,6 +265,58 @@ function drawPageShadow(px: number, py: number): void {
   ctx.restore()
 }
 
+// --- Cached text layout (only recomputed when creature moves) ---
+type CachedLine = { text: string; x: number; y: number }
+let cachedLines: CachedLine[] = []
+let layoutDirty = true
+
+function recomputeTextLayout(rectObstacles: RectObstacle[], pageOffsetX: number, pageOffsetY: number): void {
+  cachedLines = []
+  ctx.save()
+  ctx.font = BODY_FONT
+
+  const fireActive = hasActiveFire(dragon)
+  let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 }
+  let y = MARGIN
+
+  while (y + LINE_HEIGHT <= PAGE_HEIGHT - MARGIN) {
+    const slots = getLineSlots(y, LINE_HEIGHT, rectObstacles, pageOffsetX, pageOffsetY)
+    if (slots.length === 0) { y += LINE_HEIGHT; continue }
+
+    let exhausted = false
+    for (const slot of slots) {
+      const width = slot.right - slot.left
+      const line = layoutNextLine(preparedBody, cursor, width)
+      if (line === null) { exhausted = true; break }
+      cachedLines.push({ text: line.text, x: slot.left, y: y + (LINE_HEIGHT - 18) / 2 })
+      cursor = line.end
+    }
+    if (exhausted) break
+    y += LINE_HEIGHT
+  }
+
+  ctx.restore()
+  layoutDirty = false
+}
+
+function drawCachedText(pageOffsetX: number, pageOffsetY: number): void {
+  ctx.save()
+  ctx.font = BODY_FONT
+  ctx.textBaseline = 'top'
+
+  const fireActive = hasActiveFire(dragon)
+  for (const line of cachedLines) {
+    if (!fireActive) {
+      ctx.fillStyle = TEXT_COLOR
+      ctx.fillText(line.text, line.x, line.y)
+    } else {
+      drawCharsWithFire(line.text, line.x, line.y, pageOffsetX, pageOffsetY)
+    }
+  }
+
+  ctx.restore()
+}
+
 // --- Main render loop ---
 let scheduled = false
 
@@ -324,32 +325,34 @@ function render(now: number): void {
 
   const p = pageOffset()
 
-  // Update creature — head chases mouse, body follows
-  const stepped = stepCreature(dragon, now, mouse.x, mouse.y)
+  // Update creature — head chases mouse, or perches on drop cap when idle
+  const idle = now - lastMouseMoveTime > IDLE_THRESHOLD
+  const perchX = p.x + MARGIN + DROP_CAP_WIDTH * 0.8
+  const perchY = p.y + MARGIN - 70
+  const stepped = stepCreature(dragon, now, mouse.x, mouse.y, idle, perchX, perchY)
   if (mouseDown) spawnFireParticles(dragon)
   const fireActive = hasActiveFire(dragon)
   if (fireActive) stepFire(dragon, now)
 
-  // Build page-local rect obstacles (drop cap)
+  if (stepped || fireActive) layoutDirty = true
+
   const dc = dropCapMetrics()
   const rectObstacles: RectObstacle[] = [
     { x: MARGIN - 4, y: MARGIN - 4, width: dc.width, height: dc.height },
   ]
 
+  // Only recompute text layout when creature segments moved
+  if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
+
   // --- Draw ---
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
 
-  drawPageShadow(p.x, p.y)
-
   ctx.save()
   ctx.translate(p.x, p.y)
 
-  ctx.drawImage(parchmentCanvas, 0, 0, PAGE_WIDTH, PAGE_HEIGHT)
-
-  drawVines()
   drawDropCap()
-  layoutAndDrawText(rectObstacles, p.x, p.y)
+  drawCachedText(p.x, p.y)
 
   ctx.restore()
 
@@ -357,7 +360,7 @@ function render(now: number): void {
   drawFire(ctx, dragon)
   drawCreature(ctx, dragon)
 
-  if (stepped || fireActive || mouseDown) scheduleRender()
+  scheduleRender()
 }
 
 function scheduleRender(): void {

@@ -1,11 +1,12 @@
 // Serpentine dragon — a chain of segments that follow each other.
 // Head chases the mouse, each segment trails the one ahead.
+// Rendered with sprite images from /dragon-sprites/.
 
 export type Segment = {
   x: number
   y: number
   angle: number // facing direction
-  width: number // visual width at this segment
+  width: number // visual width at this segment (for text wrapping)
 }
 
 export type FireParticle = {
@@ -29,20 +30,100 @@ export type Creature = {
   fireLastStep: number
 }
 
-const SEGMENT_COUNT = 24
-const SEGMENT_SPACING = 18
-const HEAD_WIDTH = 32
-const NECK_WIDTH = 22
-const BODY_WIDTH = 28
-const TAIL_WIDTH = 6
+// --- Sprite loading ---
+// Pre-scaled canvases for fast drawing (avoids scaling large images every frame)
+let headImg: CanvasImageSource
+let tongueImg: CanvasImageSource
+let bodyImgs: CanvasImageSource[] = []
+let wingFrontImg: CanvasImageSource
+let wingBackImg: CanvasImageSource
+let fireImgs: CanvasImageSource[] = []
+
+// Store scaled dimensions for each sprite
+let headSize: { w: number; h: number }
+let tongueSize: { w: number; h: number }
+let bodySizes: { w: number; h: number }[] = []
+let wingFrontSize: { w: number; h: number }
+let wingBackSize: { w: number; h: number }
+let fireSizes: { w: number; h: number }[] = []
+
+const FIRE_SPRITE_COUNT = 10
+const FIRE_SPRITE_SCALE = 0.12
+const FIRE_SPRITE_NAMES = [
+  'Layer 2', 'Layer 3', 'Layer 4', 'Layer 5', 'Layer 6',
+  'Layer 7', 'Layer 8', 'Layer 9', 'Layer 10', 'Layer 11',
+]
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+}
+
+function preScale(img: HTMLImageElement, scale: number): { canvas: OffscreenCanvas; w: number; h: number } {
+  const w = Math.round(img.width * scale)
+  const h = Math.round(img.height * scale)
+  const canvas = new OffscreenCanvas(w, h)
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(img, 0, 0, w, h)
+  return { canvas, w, h }
+}
+
+export async function loadDragonSprites(): Promise<void> {
+  const results = await Promise.all([
+    loadImage('/dragon-sprites/head.png'),
+    loadImage('/dragon-sprites/tongue.png'),
+    loadImage('/dragon-sprites/wing-front.png'),
+    loadImage('/dragon-sprites/wing-back.png'),
+    ...Array.from({ length: 19 }, (_, i) => loadImage(`/dragon-sprites/body-${i + 1}.png`)),
+  ])
+
+  const s = SPRITE_SCALE
+  let r: ReturnType<typeof preScale>
+
+  r = preScale(results[0]!, s); headImg = r.canvas; headSize = { w: r.w, h: r.h }
+  r = preScale(results[1]!, s); tongueImg = r.canvas; tongueSize = { w: r.w, h: r.h }
+  r = preScale(results[2]!, s); wingFrontImg = r.canvas; wingFrontSize = { w: r.w, h: r.h }
+  r = preScale(results[3]!, s); wingBackImg = r.canvas; wingBackSize = { w: r.w, h: r.h }
+
+  for (let i = 4; i < results.length; i++) {
+    r = preScale(results[i]!, s)
+    bodyImgs.push(r.canvas)
+    bodySizes.push({ w: r.w, h: r.h })
+  }
+
+  // Load fire particle sprites
+  const fireResults = await Promise.all(
+    FIRE_SPRITE_NAMES.map(name => loadImage(`/fire-sprites/${name}.png`))
+  )
+  for (const img of fireResults) {
+    r = preScale(img, FIRE_SPRITE_SCALE)
+    fireImgs.push(r.canvas)
+    fireSizes.push({ w: r.w, h: r.h })
+  }
+}
+
+// --- Config ---
+const SEGMENT_COUNT = 20 // head (0) + 19 body segments
+const SEGMENT_SPACING = 30
+const SPRITE_SCALE = 0.24
+const WING_SEGMENT = 5 // body index where wings attach (body-5, the widest)
+
+// Perpendicular dimension (height) of each sprite, for collision/text-wrapping
+const SPRITE_HEIGHTS = [
+  221, // head
+  130, 203, 223, 285, 299, 281, 224, 192, 174, // body 1–9
+  191, 156, 155, 122, 126, 125, 107, 101, 101, 81, // body 10–19
+]
 
 function segmentWidth(i: number): number {
-  if (i === 0) return HEAD_WIDTH
-  if (i === 1) return NECK_WIDTH
-  if (i < 5) return BODY_WIDTH
-  // Taper toward tail
-  const t = (i - 5) / (SEGMENT_COUNT - 5)
-  return BODY_WIDTH * (1 - t) + TAIL_WIDTH * t
+  if (i < SPRITE_HEIGHTS.length) {
+    return SPRITE_HEIGHTS[i]! * SPRITE_SCALE
+  }
+  return 10
 }
 
 export function makeDragon(startX: number, startY: number): Creature {
@@ -51,7 +132,7 @@ export function makeDragon(startX: number, startY: number): Creature {
     segments.push({
       x: startX,
       y: startY + i * SEGMENT_SPACING,
-      angle: -Math.PI / 2, // facing up
+      angle: -Math.PI / 2,
       width: segmentWidth(i),
     })
   }
@@ -59,20 +140,58 @@ export function makeDragon(startX: number, startY: number): Creature {
     segments,
     jitterSeed: Math.random() * 1000,
     lastStepTime: 0,
-    stepInterval: 80, // ~12fps
+    stepInterval: 80,
     fire: [],
     fireLastStep: 0,
   }
 }
 
-export function stepCreature(creature: Creature, now: number, targetX: number, targetY: number): boolean {
+// Generate idle pose: head on top of drop cap facing right, body curves down-left
+function generateIdlePose(perchX: number, perchY: number): { x: number; y: number; angle: number }[] {
+  const pose: { x: number; y: number; angle: number }[] = []
+  // Head faces right (angle 0)
+  const headAngle = 0
+
+  pose.push({ x: perchX, y: perchY - 2, angle: headAngle })
+
+  for (let i = 1; i < SEGMENT_COUNT; i++) {
+    // Body trails left from head, curving downward
+    const t = i / (SEGMENT_COUNT - 1)
+    // Negative angle so segments go left and DOWN (sin negative = +y in canvas)
+    const segAngle = -(t * (Math.PI / 2) * 1.4)
+    const prev = pose[i - 1]!
+    pose.push({
+      x: prev.x - Math.cos(segAngle) * SEGMENT_SPACING,
+      y: prev.y - Math.sin(segAngle) * SEGMENT_SPACING,
+      angle: segAngle,
+    })
+  }
+  return pose
+}
+
+export function stepCreature(creature: Creature, now: number, targetX: number, targetY: number, idle: boolean = false, perchX: number = 0, perchY: number = 0): boolean {
   if (now - creature.lastStepTime < creature.stepInterval) return false
   creature.lastStepTime = now
   creature.jitterSeed = Math.random() * 1000
 
+  if (idle) {
+    const pose = generateIdlePose(perchX, perchY)
+    const lerpSpeed = 0.12
+    for (let i = 0; i < creature.segments.length; i++) {
+      const seg = creature.segments[i]!
+      const target = pose[i]!
+      seg.x += (target.x - seg.x) * lerpSpeed
+      seg.y += (target.y - seg.y) * lerpSpeed
+      let angleDiff = target.angle - seg.angle
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+      seg.angle += angleDiff * lerpSpeed
+    }
+    return true
+  }
+
   const head = creature.segments[0]!
 
-  // Head chases target
   const dx = targetX - head.x
   const dy = targetY - head.y
   const dist = Math.sqrt(dx * dx + dy * dy)
@@ -84,20 +203,27 @@ export function stepCreature(creature: Creature, now: number, targetX: number, t
     head.angle = Math.atan2(dy, dx)
   }
 
-  // Each subsequent segment follows the one ahead
+  const MAX_BEND = 0.25 // max angle change between adjacent segments (radians)
+
   for (let i = 1; i < creature.segments.length; i++) {
     const leader = creature.segments[i - 1]!
     const seg = creature.segments[i]!
-    const fx = leader.x - seg.x
-    const fy = leader.y - seg.y
-    const fd = Math.sqrt(fx * fx + fy * fy)
 
-    if (fd > SEGMENT_SPACING) {
-      const pull = fd - SEGMENT_SPACING
-      seg.x += (fx / fd) * pull
-      seg.y += (fy / fd) * pull
-    }
-    seg.angle = Math.atan2(leader.y - seg.y, leader.x - seg.x)
+    // Desired angle toward leader
+    let desired = Math.atan2(leader.y - seg.y, leader.x - seg.x)
+
+    // Constrain angle relative to leader's angle
+    let diff = desired - leader.angle
+    while (diff > Math.PI) diff -= Math.PI * 2
+    while (diff < -Math.PI) diff += Math.PI * 2
+    if (diff > MAX_BEND) desired = leader.angle + MAX_BEND
+    else if (diff < -MAX_BEND) desired = leader.angle - MAX_BEND
+
+    seg.angle = desired
+
+    // Position segment behind leader at constrained angle
+    seg.x = leader.x - Math.cos(seg.angle) * SEGMENT_SPACING
+    seg.y = leader.y - Math.sin(seg.angle) * SEGMENT_SPACING
   }
 
   return true
@@ -116,14 +242,11 @@ export function getCreatureIntervalsForBand(
 
   for (const seg of creature.segments) {
     const r = seg.width / 2 + padding
-    // Treat each segment as a circle — find x-extent within the band
     if (seg.y + r < bandTop || seg.y - r > bandBottom) continue
 
-    // Circle-band intersection: x-extent at the closest/widest point
     const bandCenter = (bandTop + bandBottom) / 2
     const dy = Math.abs(seg.y - bandCenter)
     const bandHalf = (bandBottom - bandTop) / 2
-    // Use the widest intersection across the entire band
     const closest = Math.max(0, dy - bandHalf)
     if (closest >= r) continue
     const xExtent = Math.sqrt(r * r - closest * closest)
@@ -133,7 +256,6 @@ export function getCreatureIntervalsForBand(
 
   if (intervals.length <= 1) return intervals
 
-  // Merge overlapping
   intervals.sort((a, b) => a.left - b.left)
   const merged: Interval[] = [intervals[0]!]
   for (let i = 1; i < intervals.length; i++) {
@@ -148,13 +270,30 @@ export function getCreatureIntervalsForBand(
   return merged
 }
 
-// --- Drawing ---
+// --- Drawing with sprites ---
 export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature): void {
   const segs = creature.segments
   const jitter = creature.jitterSeed
+  const wingTime = performance.now() / 1000
 
-  // Draw back to front so head is on top
-  // Body segments
+  // 1. Draw wing-back behind everything
+  if (wingBackImg) {
+    const wingSeg = segs[WING_SEGMENT]!
+    const j = pseudoRandom(jitter + WING_SEGMENT * 37)
+    const jx = (j - 0.5) * 1.5
+    const jy = (pseudoRandom(jitter + WING_SEGMENT * 37 + 100) - 0.5) * 1.5
+    const jAngle = (pseudoRandom(jitter + WING_SEGMENT * 37 + 200) - 0.5) * 0.04
+    const wingFlap = Math.sin(wingTime * 3) * 0.4
+
+    ctx.save()
+    ctx.translate(wingSeg.x + jx, wingSeg.y + jy)
+    ctx.rotate(wingSeg.angle + jAngle + wingFlap)
+    const { w: ww, h: wh } = wingBackSize
+    ctx.drawImage(wingBackImg, 0, 0, ww, wh, -ww, -wh, ww, wh)
+    ctx.restore()
+  }
+
+  // 2. Draw body segments (tail to head) with wing-front on top
   for (let i = segs.length - 1; i >= 0; i--) {
     const seg = segs[i]!
     const j = pseudoRandom(jitter + i * 37)
@@ -167,176 +306,52 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
     ctx.rotate(seg.angle + jAngle)
 
     if (i === 0) {
-      drawHead(ctx, seg.width, jitter)
+      if (tongueImg) {
+        const { w: tw, h: th } = tongueSize
+        ctx.drawImage(tongueImg, 0, 0, tw, th, headSize.w * 0.3, -th / 2, tw, th)
+      }
+      if (headImg) {
+        const { w: hw, h: hh } = headSize
+        ctx.drawImage(headImg, 0, 0, hw, hh, -hw * 0.45, -hh / 2, hw, hh)
+      }
     } else {
-      drawBodySegment(ctx, seg.width, i, segs.length)
-    }
+      const bodyIdx = i - 1
+      const bodyImg = bodyImgs[bodyIdx]
+      const bodySize = bodySizes[bodyIdx]
 
-    // Small wings on segments 3 and 4
-    if (i === 3 || i === 4) {
-      drawWings(ctx, seg.width, i, jitter)
+      if (bodyImg && bodySize) {
+        const { w: sw, h: sh } = bodySize
+        ctx.drawImage(bodyImg, 0, 0, sw, sh, -sw / 2, -sh / 2, sw, sh)
+      }
+
+      if (i === WING_SEGMENT && wingFrontImg) {
+        const wingFlap = Math.sin(wingTime * 3 + 0.5) * 0.4
+        ctx.save()
+        const { w: ww, h: wh } = wingFrontSize
+        ctx.rotate(-wingFlap)
+        ctx.drawImage(wingFrontImg, 0, 0, ww, wh, -ww, -wh, ww, wh)
+        ctx.restore()
+      }
     }
 
     ctx.restore()
   }
 }
 
-function drawHead(ctx: CanvasRenderingContext2D, w: number, jitter: number): void {
-  const hw = w / 2
-  const hl = w * 0.7
-
-  // Head shape — slightly pointed
-  ctx.fillStyle = '#A0522D'
-  ctx.shadowColor = 'rgba(0,0,0,0.3)'
-  ctx.shadowBlur = 4
-  ctx.shadowOffsetX = 2
-  ctx.shadowOffsetY = 2
-
-  ctx.beginPath()
-  ctx.moveTo(hl + 8, 0) // snout tip
-  ctx.lineTo(hl * 0.3, -hw)
-  ctx.lineTo(-hl, -hw * 0.8)
-  ctx.lineTo(-hl, hw * 0.8)
-  ctx.lineTo(hl * 0.3, hw)
-  ctx.closePath()
-  ctx.fill()
-
-  ctx.shadowColor = 'transparent'
-
-  // Eye
-  ctx.fillStyle = '#1a0a00'
-  ctx.beginPath()
-  ctx.arc(hl * 0.15, -hw * 0.35, 3, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Nostril
-  ctx.fillStyle = '#5a2d0c'
-  ctx.beginPath()
-  ctx.arc(hl * 0.6, -hw * 0.15, 2, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Horns
-  ctx.fillStyle = '#DEB887'
-  ctx.save()
-  ctx.translate(-hl * 0.2, -hw * 0.7)
-  ctx.rotate(-0.6)
-  ctx.fillRect(-2, -18, 5, 18)
-  ctx.restore()
-
-  ctx.save()
-  ctx.translate(-hl * 0.2, hw * 0.7)
-  ctx.rotate(0.6)
-  ctx.fillRect(-2, 0, 5, 18)
-  ctx.restore()
-
-  // Jaw line
-  ctx.strokeStyle = '#6B3410'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(hl + 6, 1)
-  ctx.lineTo(hl * 0.1, hw * 0.5)
-  ctx.stroke()
-}
-
-function drawBodySegment(ctx: CanvasRenderingContext2D, w: number, index: number, total: number): void {
-  const hw = w / 2
-  const hl = SEGMENT_SPACING * 0.55
-
-  // Alternate slightly between two browns for scale-like feel
-  ctx.fillStyle = index % 2 === 0 ? '#8B4513' : '#7a3b10'
-  ctx.shadowColor = 'rgba(0,0,0,0.2)'
-  ctx.shadowBlur = 3
-  ctx.shadowOffsetX = 1
-  ctx.shadowOffsetY = 2
-
-  // Rounded body segment
-  ctx.beginPath()
-  ctx.ellipse(0, 0, hl, hw, 0, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.shadowColor = 'transparent'
-
-  // Scale texture — subtle chevron marks
-  if (w > 12) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(hl * 0.3, -hw * 0.4)
-    ctx.lineTo(hl * 0.5, 0)
-    ctx.lineTo(hl * 0.3, hw * 0.4)
-    ctx.stroke()
-  }
-
-  // Tail fin on last segment
-  if (index === total - 1) {
-    ctx.fillStyle = '#6B3410'
-    ctx.beginPath()
-    ctx.moveTo(-hl, 0)
-    ctx.lineTo(-hl - 20, -12)
-    ctx.lineTo(-hl - 8, 0)
-    ctx.lineTo(-hl - 20, 12)
-    ctx.closePath()
-    ctx.fill()
-  }
-}
-
-function drawWings(ctx: CanvasRenderingContext2D, w: number, index: number, jitter: number): void {
-  const wingFlap = Math.sin(jitter * 0.1 + index) * 0.3
-  const hw = w / 2
-
-  ctx.fillStyle = '#6B3410'
-  ctx.shadowColor = 'rgba(0,0,0,0.2)'
-  ctx.shadowBlur = 3
-
-  // Top wing
-  ctx.save()
-  ctx.translate(0, -hw)
-  ctx.rotate(-0.8 + wingFlap)
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(15, -35)
-  ctx.lineTo(25, -20)
-  ctx.lineTo(10, -10)
-  ctx.closePath()
-  ctx.fill()
-  ctx.restore()
-
-  // Bottom wing
-  ctx.save()
-  ctx.translate(0, hw)
-  ctx.rotate(0.8 - wingFlap)
-  ctx.beginPath()
-  ctx.moveTo(0, 0)
-  ctx.lineTo(15, 35)
-  ctx.lineTo(25, 20)
-  ctx.lineTo(10, 10)
-  ctx.closePath()
-  ctx.fill()
-  ctx.restore()
-
-  ctx.shadowColor = 'transparent'
-}
-
 // --- Fire breath system ---
-const FIRE_COLORS = [
-  ['#FFE44D', '#FFD700', '#FFC800'], // yellow (core)
-  ['#FF8C00', '#FF6B00', '#FF5500'], // orange (mid)
-  ['#FF3300', '#CC2200', '#AA1100'], // red (edges)
-]
-const FIRE_STEP_INTERVAL = 80 // match body framerate
+const FIRE_PALETTE = ['#C4402A', '#E08A30', '#F0C030'] // red, orange, gold
+const FIRE_STEP_INTERVAL = 80
 
-// Spawn a few particles per frame — called every render while mouse is held
 export function spawnFireParticles(creature: Creature): void {
   const head = creature.segments[0]!
-  const snoutDist = head.width * 0.7 + 8
+  const snoutDist = (headImg ? headImg.width * SPRITE_SCALE * 0.55 : 30)
   const snoutX = head.x + Math.cos(head.angle) * snoutDist
   const snoutY = head.y + Math.sin(head.angle) * snoutDist
 
-  // 3-5 particles per frame for a thick stream
   const count = 3 + Math.floor(Math.random() * 3)
   for (let i = 0; i < count; i++) {
-    const spread = (Math.random() - 0.5) * 0.35 // tight cone
-    const speed = 18 + Math.random() * 12 // fast!
+    const spread = (Math.random() - 0.5) * 0.25
+    const speed = 35 + Math.random() * 20
     const angle = head.angle + spread
 
     creature.fire.push({
@@ -348,7 +363,7 @@ export function spawnFireParticles(creature: Creature): void {
       life: 1,
       maxLife: 12 + Math.floor(Math.random() * 6),
       frame: 0,
-      color: Math.random() < 0.3 ? 0 : Math.random() < 0.6 ? 1 : 2,
+      color: Math.floor(Math.random() * 3),
     })
   }
 }
@@ -366,16 +381,16 @@ export function stepFire(creature: Creature, now: number): void {
     p.frame++
     p.life = 1 - p.frame / p.maxLife
 
-    // Move fast in discrete steps
     p.x += p.vx
     p.y += p.vy
 
-    // Slight deceleration, slight upward drift
-    p.vx *= 0.93
-    p.vy *= 0.93
-    p.vy -= 0.8
+    p.vx *= 0.95
+    p.vy *= 0.95
 
-    // Grow at start, shrink at end
+    // Drift upward only after traveling straight for a bit
+    const drift = Math.max(0, (p.frame - 4) / p.maxLife)
+    p.vy -= drift * 1.5
+
     if (p.life < 0.25) {
       p.size *= 0.75
     } else if (p.frame < 3) {
@@ -388,52 +403,64 @@ export function stepFire(creature: Creature, now: number): void {
   }
 }
 
+// Draw a wobbly line between two points with subdivided jitter
+function wobbleLine(
+  ctx: CanvasRenderingContext2D,
+  x1: number, y1: number,
+  x2: number, y2: number,
+  seed: number, roughness: number,
+) {
+  const steps = 4
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps
+    const jx = (pseudoRandom(seed + i * 13) - 0.5) * roughness
+    const jy = (pseudoRandom(seed + i * 29) - 0.5) * roughness
+    ctx.lineTo(x1 + (x2 - x1) * t + jx, y1 + (y2 - y1) * t + jy)
+  }
+}
+
 export function drawFire(ctx: CanvasRenderingContext2D, creature: Creature): void {
   for (const p of creature.fire) {
-    const colors = FIRE_COLORS[p.color]!
-    // Pick shade based on life — bright when new, dark when dying
-    const shade = p.life > 0.6 ? 0 : p.life > 0.3 ? 1 : 2
-    const jx = (pseudoRandom(p.frame * 17 + p.color * 7) - 0.5) * 4
-    const jy = (pseudoRandom(p.frame * 31 + p.color * 13) - 0.5) * 4
-    const jAngle = (pseudoRandom(p.frame * 53 + p.color * 3) - 0.5) * 0.5
+    const velocityAngle = Math.atan2(p.vy, p.vx)
 
     ctx.save()
-    ctx.translate(p.x + jx, p.y + jy)
-    ctx.rotate(jAngle)
-
-    // Draw as a rough, wobbly diamond/flame shape
-    ctx.fillStyle = colors[shade]!
+    ctx.translate(p.x, p.y)
+    ctx.rotate(velocityAngle)
     ctx.globalAlpha = Math.min(1, p.life * 1.5)
-    ctx.shadowColor = colors[0]!
-    ctx.shadowBlur = p.size * 0.6
+    // Transition red → orange → gold as particle ages
+    const age = 1 - p.life // 0 = new, 1 = dying
+    const colorIdx = age < 0.33 ? 0 : age < 0.66 ? 1 : 2
+    ctx.fillStyle = FIRE_PALETTE[colorIdx]!
 
     const s = p.size / 2
-    const w = () => (pseudoRandom(p.frame * 7 + s) - 0.5) * 3
+    const seed = p.color * 31 + p.frame * 0.3
+    const jit = (i: number) => (pseudoRandom(seed + i * 17) - 0.5) * s * 0.4
+    const roughness = s * 0.35
+
+    // Diamond vertices
+    const verts = [
+      [s * 1.2 + jit(0), jit(1)],         // right tip (leading)
+      [jit(2), -s * 0.7 + jit(3)],        // top
+      [-s + jit(4), jit(5)],              // left
+      [jit(6), s * 0.7 + jit(7)],         // bottom
+    ]
+
+    // Build wobbly path
     ctx.beginPath()
-    ctx.moveTo(0 + w(), -s + w())
-    ctx.lineTo(s * 0.7 + w(), 0 + w())
-    ctx.lineTo(0 + w(), s * 1.2 + w())
-    ctx.lineTo(-s * 0.7 + w(), 0 + w())
+    ctx.moveTo(verts[0]![0], verts[0]![1])
+    for (let i = 0; i < 4; i++) {
+      const next = verts[(i + 1) % 4]!
+      wobbleLine(ctx, verts[i]![0], verts[i]![1], next[0], next[1], seed + i * 100, roughness)
+    }
     ctx.closePath()
+
     ctx.fill()
 
-    // Inner bright core
-    if (p.life > 0.4) {
-      ctx.fillStyle = '#FFF8E0'
-      ctx.globalAlpha = (p.life - 0.4) * 1.2
-      ctx.beginPath()
-      ctx.arc(0, 0, s * 0.25, 0, Math.PI * 2)
-      ctx.fill()
-    }
-
     ctx.globalAlpha = 1
-    ctx.shadowColor = 'transparent'
     ctx.restore()
   }
 }
 
-// Compute the force fire exerts on a point in world space.
-// Returns a direction (dx, dy normalized) and strength (0..1+).
 export function getFireForce(
   creature: Creature,
   worldX: number,
@@ -451,7 +478,7 @@ export function getFireForce(
     if (dist > FIRE_RADIUS || dist < 0.1) continue
 
     const falloff = 1 - dist / FIRE_RADIUS
-    const strength = falloff * falloff * p.life // quadratic falloff, scaled by particle life
+    const strength = falloff * falloff * p.life
     const ndx = dx / dist
     const ndy = dy / dist
 
