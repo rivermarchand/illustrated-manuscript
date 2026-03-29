@@ -37,25 +37,14 @@ let dims = computeDims()
 // --- Canvas: fills viewport ---
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
-const dpr = window.devicePixelRatio || 1
-
-// iOS Safari limits total canvas memory — cap pixel count to avoid silent downgrade
-const MAX_CANVAS_PIXELS = 16_777_216
 
 function resizeCanvas(): void {
-  let w = window.innerWidth * dpr
-  let h = window.innerHeight * dpr
-  const pixels = w * h
-  if (pixels > MAX_CANVAS_PIXELS) {
-    const scale = Math.sqrt(MAX_CANVAS_PIXELS / pixels)
-    w = Math.floor(w * scale)
-    h = Math.floor(h * scale)
-  }
-  canvas.width = w
-  canvas.height = h
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = Math.round(window.innerWidth * dpr)
+  canvas.height = Math.round(window.innerHeight * dpr)
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
-  ctx.setTransform(w / window.innerWidth, 0, 0, h / window.innerHeight, 0, 0)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 resizeCanvas()
 window.addEventListener('resize', () => {
@@ -386,9 +375,8 @@ function render(now: number): void {
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
   // --- Draw ---
-  const rx = canvas.width / window.innerWidth
-  const ry = canvas.height / window.innerHeight
-  ctx.setTransform(rx, 0, 0, ry, 0, 0)
+  const dpr = window.devicePixelRatio || 1
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
 
