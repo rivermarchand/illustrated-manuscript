@@ -36,7 +36,7 @@ let dims = computeDims()
 
 // --- Canvas: fills viewport ---
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
-const ctx = canvas.getContext('2d')!
+const ctx = canvas.getContext('2d', { alpha: false })!
 
 function resizeCanvas(): void {
   const dpr = window.devicePixelRatio || 1
@@ -337,7 +337,7 @@ function drawCachedText(pageOffsetX: number, pageOffsetY: number): void {
   for (const line of cachedLines) {
     if (!fireActive) {
       ctx.fillStyle = TEXT_COLOR
-      ctx.fillText(line.text, line.x, line.y)
+      ctx.fillText(line.text, Math.round(line.x), Math.round(line.y))
     } else {
       drawCharsWithFire(line.text, line.x, line.y, pageOffsetX, pageOffsetY)
     }

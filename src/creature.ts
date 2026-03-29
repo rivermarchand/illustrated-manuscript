@@ -65,13 +65,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 function preScale(img: HTMLImageElement, scale: number): { canvas: HTMLCanvasElement; w: number; h: number } {
+  const dpr = window.devicePixelRatio || 1
   const w = Math.round(img.width * scale)
   const h = Math.round(img.height * scale)
   const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
+  canvas.width = Math.round(w * dpr)
+  canvas.height = Math.round(h * dpr)
   const ctx = canvas.getContext('2d')!
-  ctx.drawImage(img, 0, 0, w, h)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
   return { canvas, w, h }
 }
 
@@ -302,7 +303,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
     ctx.rotate(wingSeg.angle + jAngle + wingFlap)
     ctx.scale(s, s)
     const { w: ww, h: wh } = wingBackSize
-    ctx.drawImage(wingBackImg, 0, 0, ww, wh, -ww, -wh, ww, wh)
+    ctx.drawImage(wingBackImg, -ww, -wh, ww, wh)
     ctx.restore()
   }
 
@@ -322,11 +323,11 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
     if (i === 0) {
       if (tongueImg) {
         const { w: tw, h: th } = tongueSize
-        ctx.drawImage(tongueImg, 0, 0, tw, th, headSize.w * 0.3, -th / 2, tw, th)
+        ctx.drawImage(tongueImg, headSize.w * 0.3, -th / 2, tw, th)
       }
       if (headImg) {
         const { w: hw, h: hh } = headSize
-        ctx.drawImage(headImg, 0, 0, hw, hh, -hw * 0.45, -hh / 2, hw, hh)
+        ctx.drawImage(headImg, -hw * 0.45, -hh / 2, hw, hh)
       }
     } else {
       const bodyIdx = i - 1
@@ -335,7 +336,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
 
       if (bodyImg && bodySize) {
         const { w: sw, h: sh } = bodySize
-        ctx.drawImage(bodyImg, 0, 0, sw, sh, -sw / 2, -sh / 2, sw, sh)
+        ctx.drawImage(bodyImg, -sw / 2, -sh / 2, sw, sh)
       }
 
       if (i === WING_SEGMENT && wingFrontImg) {
@@ -343,7 +344,7 @@ export function drawCreature(ctx: CanvasRenderingContext2D, creature: Creature):
         ctx.save()
         const { w: ww, h: wh } = wingFrontSize
         ctx.rotate(-wingFlap)
-        ctx.drawImage(wingFrontImg, 0, 0, ww, wh, -ww, -wh, ww, wh)
+        ctx.drawImage(wingFrontImg, -ww, -wh, ww, wh)
         ctx.restore()
       }
     }
