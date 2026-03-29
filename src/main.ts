@@ -38,13 +38,16 @@ let dims = computeDims()
 const canvas = document.getElementById('manuscript') as HTMLCanvasElement
 const ctx = canvas.getContext('2d', { alpha: false })!
 
+const SUPERSAMPLE = 2
+
 function resizeCanvas(): void {
   const dpr = window.devicePixelRatio || 1
-  canvas.width = Math.round(window.innerWidth * dpr)
-  canvas.height = Math.round(window.innerHeight * dpr)
+  const scale = dpr * SUPERSAMPLE
+  canvas.width = Math.round(window.innerWidth * scale)
+  canvas.height = Math.round(window.innerHeight * scale)
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.setTransform(scale, 0, 0, scale, 0, 0)
 }
 resizeCanvas()
 window.addEventListener('resize', () => {
@@ -329,8 +332,8 @@ function render(now: number): void {
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
   // --- Draw ---
-  const dpr = window.devicePixelRatio || 1
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const scale = (window.devicePixelRatio || 1) * SUPERSAMPLE
+  ctx.setTransform(scale, 0, 0, scale, 0, 0)
   ctx.fillStyle = BG_COLOR
   ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
 
