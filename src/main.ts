@@ -1,5 +1,5 @@
 import { prepareWithSegments, layoutNextLine, type LayoutCursor, type PreparedTextWithSegments } from '@chenglou/pretext'
-import { loadDragonSprites, makeDragon, updateCreatureScale, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
+import { loadDragonSprites, makeDragon, generateIdlePose, updateCreatureScale, stepCreature, getCreatureIntervalsForBand, getFireIntervalsForBand, drawCreature, spawnFireParticles, stepFire, drawFire, hasActiveFire, getFireForce, type Creature } from './creature'
 import { STORY_TEXT } from './text'
 
 // --- Responsive config ---
@@ -110,11 +110,13 @@ function resizeCanvas(): void {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 }
 resizeCanvas()
+let initialized = false
 window.addEventListener('resize', () => {
   dims = computeDims()
+  resizeCanvas()
+  if (!initialized) return
   ensureTextPrepared()
   updateCreatureScale(dragon, getCreatureScale())
-  resizeCanvas()
   layoutDirty = true
   scheduleRender()
 })
@@ -129,21 +131,21 @@ function pageOffset(): { x: number; y: number } {
 
 // --- State ---
 const mouse = { x: 0, y: 0 }
-let lastMouseMoveTime = 0
+let lastMouseMoveTime = -Infinity
 const IDLE_THRESHOLD = 2000
 
 canvas.addEventListener('mousemove', (e) => {
   mouse.x = e.clientX
   mouse.y = e.clientY
   lastMouseMoveTime = performance.now()
-  scheduleRender()
+  if (initialized) scheduleRender()
 })
 
 let mouseDown = false
 
 canvas.addEventListener('mousedown', () => {
   mouseDown = true
-  scheduleRender()
+  if (initialized) scheduleRender()
 })
 
 canvas.addEventListener('mouseup', () => {
@@ -162,7 +164,7 @@ canvas.addEventListener('touchstart', (e) => {
   mouse.y = touch.clientY
   mouseDown = true
   lastMouseMoveTime = performance.now()
-  scheduleRender()
+  if (initialized) scheduleRender()
 }, { passive: false })
 
 canvas.addEventListener('touchmove', (e) => {
@@ -171,26 +173,16 @@ canvas.addEventListener('touchmove', (e) => {
   mouse.x = touch.clientX
   mouse.y = touch.clientY
   lastMouseMoveTime = performance.now()
-  scheduleRender()
+  if (initialized) scheduleRender()
 }, { passive: false })
 
 canvas.addEventListener('touchend', () => {
   mouseDown = false
 })
 
-// --- Load dragon sprites, then create creature ---
+// --- Load assets ---
 await loadDragonSprites()
 
-function getCreatureScale(): number {
-  return Math.min(1, dims.pageWidth / BASE_PAGE_WIDTH)
-}
-
-const dragon: Creature = (() => {
-  const p = pageOffset()
-  return makeDragon(p.x + dims.pageWidth / 2, p.y + dims.pageHeight / 3, getCreatureScale())
-})()
-
-// --- Prepare text (re-prepared when font size changes) ---
 await new FontFace('Furia', 'url(/furia-iii.ttf)').load().then(f => document.fonts.add(f))
 await document.fonts.ready
 
@@ -228,6 +220,27 @@ function drawDropCap(): void {
 function dropCapMetrics(): { width: number; height: number } {
   return getDropCapSize()
 }
+
+// --- Create creature at idle perch pose ---
+function getCreatureScale(): number {
+  return Math.min(1, dims.pageWidth / BASE_PAGE_WIDTH)
+}
+
+const dragon: Creature = (() => {
+  const p = pageOffset()
+  const dc = getDropCapSize()
+  const cScale = getCreatureScale()
+  const perchX = p.x + dims.margin + dc.width * 0.8
+  const perchY = p.y + dims.margin - 70 * cScale
+  const d = makeDragon(perchX, perchY, cScale)
+  const pose = generateIdlePose(perchX, perchY, cScale)
+  for (let i = 0; i < d.segments.length; i++) {
+    d.segments[i]!.x = pose[i]!.x
+    d.segments[i]!.y = pose[i]!.y
+    d.segments[i]!.angle = pose[i]!.angle
+  }
+  return d
+})()
 
 // --- Text layout with obstacle avoidance (page-local coords) ---
 type RectObstacle = { x: number; y: number; width: number; height: number }
@@ -423,4 +436,5 @@ function scheduleRender(): void {
   requestAnimationFrame(render)
 }
 
+initialized = true
 scheduleRender()

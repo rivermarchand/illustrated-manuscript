@@ -159,7 +159,7 @@ export function updateCreatureScale(creature: Creature, scale: number): void {
 }
 
 // Generate idle pose: head on top of drop cap facing right, body curves down-left
-function generateIdlePose(perchX: number, perchY: number, scale: number): { x: number; y: number; angle: number }[] {
+export function generateIdlePose(perchX: number, perchY: number, scale: number): { x: number; y: number; angle: number }[] {
   const pose: { x: number; y: number; angle: number }[] = []
   const spacing = SEGMENT_SPACING * scale
   const headAngle = 0
