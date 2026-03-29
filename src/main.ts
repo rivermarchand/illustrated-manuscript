@@ -26,8 +26,9 @@ function getPageScale(): number {
 }
 
 function resizeCanvas(): void {
-  canvas.width = window.innerWidth * dpr
-  canvas.height = window.innerHeight * dpr
+  const scale = getPageScale()
+  canvas.width = Math.ceil(window.innerWidth / scale) * dpr
+  canvas.height = Math.ceil(window.innerHeight / scale) * dpr
   canvas.style.width = `${window.innerWidth}px`
   canvas.style.height = `${window.innerHeight}px`
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -380,13 +381,9 @@ function render(now: number): void {
   if (layoutDirty) recomputeTextLayout(rectObstacles, p.x, p.y)
 
   // --- Draw ---
-  // Clear at full viewport size (unscaled)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.fillStyle = BG_COLOR
-  ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
-
-  // Apply page scale for all content
-  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0)
+  ctx.fillRect(0, 0, window.innerWidth / scale, window.innerHeight / scale)
 
   ctx.save()
   ctx.translate(p.x, p.y)
